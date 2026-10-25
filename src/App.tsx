@@ -1,764 +1,928 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Wrench, Users, Package, DollarSign, BarChart3, Settings, Plus, Search, 
+  Printer, MessageSquare, Trash2, Edit, Save, RefreshCw, Download, Upload, 
+  CheckCircle, Clock, AlertTriangle, ShieldCheck, Smartphone, Laptop, 
+  ShoppingBag, FileText, ChevronRight, X, Camera, Lock, Check
+} from 'lucide-react';
 
-// --- Types & Interfaces ---
-interface RepairJob {
+// --- TYPES ---
+interface Customer {
   id: string;
-  bookingDate: string;
-  bookingTime: string;
+  name: string;
+  phone: string;
+  address: string;
+  type: 'Customer' | 'Technician';
+}
+
+interface PartItem {
+  id: string;
+  name: string;
+  purchasePrice: number;
+  salePrice: number;
+  stock: number;
+}
+
+interface JobSheet {
+  id: string;
+  ticketNo: string;
   customerName: string;
-  customerMobile: string;
-  phoneModel: string;
+  customerPhone: string;
+  deviceType: 'Mobile' | 'Laptop' | 'Other';
+  brand: string;
+  model: string;
+  serialNo: string;
   problem: string;
-  totalCost: number;
-  advancePayment: number;
-  remainingBalance: number;
-  status: 'RECEIVED' | 'PENDING' | 'REPAIRING' | 'COMPLETED' | 'NOT REPAIR' | 'RETURN' | 'DELIVERED';
-  paymentStatus: 'Paid' | 'Partial' | 'Unpaid';
-  lockInfo: string;
-  folderWarranty: string;
-  imei: string;
+  lockType: 'Password' | 'Pin' | 'Pattern';
+  lockValue: string; // e.g. "1-2-3-5-7" for pattern
   technician: string;
-}
-
-interface AccessoryWarranty {
-  id: string;
-  activationDate: string;
-  itemName: string;
-  sellingPrice: number;
-  duration: string;
-  expiryDate: string;
-  status: 'ACTIVE' | 'EXPIRING SOON' | 'EXPIRED';
-}
-
-interface StockItem {
-  code: string;
-  name: string;
-  quantity: number;
-  costPrice: number;
-  sellingPrice: number;
-  lastUpdated: string;
-}
-
-interface ShopExpense {
-  id: string;
+  repairCost: number;
+  partsUsed: { partId: string; name: string; price: number; qty: number }[];
+  advancePaid: number;
+  status: 'Checking' | 'Pending Parts' | 'Repairing' | 'Ready' | 'Delivered' | 'Cancelled';
+  rackNo: string;
+  notes: string;
   date: string;
-  name: string;
+}
+
+interface Expense {
+  id: string;
+  category: string;
   amount: number;
+  date: string;
+  notes: string;
+}
+
+interface ShopSettings {
+  shopName: string;
+  gstin: string;
+  phone: string;
+  email: string;
+  address: string;
+  invoicePrefix: string;
+  currency: string;
 }
 
 export default function App() {
-  // Authentication State
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    return localStorage.getItem('vc_is_logged_in') === 'true';
-  });
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-
-  // Main App State
-  const [activeTab, setActiveTab] = useState<'jobs' | 'create' | 'warranty' | 'stock' | 'expenses' | 'balance' | 'reports'>('jobs');
+  // --- STATE ---
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'jobs' | 'pos' | 'customers' | 'stock' | 'expenses' | 'reports' | 'settings'>('dashboard');
   
-  // Data States with LocalStorage Persistence
-  const [jobs, setJobs] = useState<RepairJob[]>(() => {
-    const saved = localStorage.getItem('vc_jobs');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [warranties, setWarranties] = useState<AccessoryWarranty[]>(() => {
-    const saved = localStorage.getItem('vc_warranties');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [stock, setStock] = useState<StockItem[]>(() => {
-    const saved = localStorage.getItem('vc_stock');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [expenses, setExpenses] = useState<ShopExpense[]>(() => {
-    const saved = localStorage.getItem('vc_expenses');
-    return saved ? JSON.parse(saved) : [];
+  // Settings
+  const [settings, setSettings] = useState<ShopSettings>(() => {
+    const saved = localStorage.getItem('viraj_settings');
+    return saved ? JSON.parse(saved) : {
+      shopName: 'VIRAJ CONNECT',
+      gstin: '07AAAAA0000A1Z5',
+      phone: '+91 9876543210',
+      email: 'virajconnect.in@gmail.com',
+      address: 'Main Market, Mobile & Repair Hub, India',
+      invoicePrefix: 'VC-',
+      currency: '₹'
+    };
   });
 
-  // Filters & Search
-  const [jobSearch, setJobSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  // Customers & Technicians
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('viraj_customers');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', name: 'Rahul Sharma', phone: '9876543210', address: 'Delhi', type: 'Customer' },
+      { id: '2', name: 'Amit Kumar (Tech)', phone: '9123456789', address: 'Shop Floor', type: 'Technician' }
+    ];
+  });
+
+  // Stock / Parts
+  const [stockItems, setStockItems] = useState<PartItem[]>(() => {
+    const saved = localStorage.getItem('viraj_stock');
+    return saved ? JSON.parse(saved) : [
+      { id: 'p1', name: 'Fast Charger 33W', purchasePrice: 250, salePrice: 499, stock: 15 },
+      { id: 'p2', name: 'TWS Earbuds Pro', purchasePrice: 450, salePrice: 999, stock: 8 },
+      { id: 'p3', name: 'Mobile Display OLED', purchasePrice: 1200, salePrice: 2200, stock: 5 },
+      { id: 'p4', name: 'Tempered Glass UV', purchasePrice: 50, salePrice: 200, stock: 30 }
+    ];
+  });
+
+  // Job Sheets
+  const [jobs, setJobs] = useState<JobSheet[]>(() => {
+    const saved = localStorage.getItem('viraj_jobs');
+    return saved ? JSON.parse(saved) : [
+      {
+        id: 'j1',
+        ticketNo: 'VC-1001',
+        customerName: 'Rahul Sharma',
+        customerPhone: '9876543210',
+        deviceType: 'Mobile',
+        brand: 'OnePlus',
+        model: 'Nord CE 3',
+        serialNo: 'OP987654',
+        problem: 'Display Broken & Touch Not Working',
+        lockType: 'Pattern',
+        lockValue: '1-2-5-8',
+        technician: 'Amit Kumar (Tech)',
+        repairCost: 1800,
+        partsUsed: [{ partId: 'p3', name: 'Mobile Display OLED', price: 2200, qty: 1 }],
+        advancePaid: 500,
+        status: 'Repairing',
+        rackNo: 'Rack-A2',
+        notes: 'Customer agreed for display replacement.',
+        date: new Date().toISOString().split('T')[0]
+      }
+    ];
+  });
+
+  // Expenses
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+    const saved = localStorage.getItem('viraj_expenses');
+    return saved ? JSON.parse(saved) : [
+      { id: 'e1', category: 'Rent', amount: 5000, date: new Date().toISOString().split('T')[0], notes: 'Shop Monthly Rent' }
+    ];
+  });
+
+  // POS Direct Sales Cart
+  const [posCart, setPosCart] = useState<{ partId: string; name: string; price: number; qty: number }[]>([]);
+  const [posCustomerName, setPosCustomerName] = useState('');
+  const [posCustomerPhone, setPosCustomerPhone] = useState('');
 
   // New Job Form State
-  const [custMobile, setCustMobile] = useState('');
-  const [custName, setCustName] = useState('');
-  const [phoneModel, setPhoneModel] = useState('');
+  const [showJobModal, setShowJobModal] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [deviceType, setDeviceType] = useState<'Mobile' | 'Laptop' | 'Other'>('Mobile');
+  const [brand, setBrand] = useState('Samsung');
+  const [model, setModel] = useState('');
+  const [serialNo, setSerialNo] = useState('');
   const [problem, setProblem] = useState('');
-  const [totalCost, setTotalCost] = useState('');
-  const [advancePayment, setAdvancePayment] = useState('');
-  const [folderWarranty, setFolderWarranty] = useState('');
-  const [lockType, setLockType] = useState('NO LOCK');
-  const [lockInfo, setLockInfo] = useState('');
-  const [imei, setImei] = useState('');
-
-  // Pattern Lock Canvas State
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawingPattern, setIsDrawingPattern] = useState(false);
+  const [lockType, setLockType] = useState<'Password' | 'Pin' | 'Pattern'>('Pattern');
   const [patternDots, setPatternDots] = useState<number[]>([]);
+  const [textLock, setTextLock] = useState('');
+  const [technician, setTechnician] = useState('');
+  const [repairCost, setRepairCost] = useState<number>(0);
+  const [advancePaid, setAdvancePaid] = useState<number>(0);
+  const [rackNo, setRackNo] = useState('Rack-1');
+  const [selectedParts, setSelectedParts] = useState<{ partId: string; name: string; price: number; qty: number }[]>([]);
 
-  // Print Receipt Modal
-  const [selectedReceiptJob, setSelectedReceiptJob] = useState<RepairJob | null>(null);
+  // Filter & Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [activeJobReceipt, setActiveJobReceipt] = useState<JobSheet | null>(null);
+  const [activePrintMode, setActivePrintMode] = useState<'a4' | 'thermal'>('a4');
 
-  // Sync Data to LocalStorage
+  // Save to LocalStorage automatically
   useEffect(() => {
-    localStorage.setItem('vc_jobs', JSON.stringify(jobs));
-  }, [jobs]);
+    localStorage.setItem('viraj_settings', JSON.stringify(settings));
+    localStorage.setItem('viraj_customers', JSON.stringify(customers));
+    localStorage.setItem('viraj_stock', JSON.stringify(stockItems));
+    localStorage.setItem('viraj_jobs', JSON.stringify(jobs));
+    localStorage.setItem('viraj_expenses', JSON.stringify(expenses));
+  }, [settings, customers, stockItems, jobs, expenses]);
 
-  useEffect(() => {
-    localStorage.setItem('vc_warranties', JSON.stringify(warranties));
-  }, [warranties]);
+  // --- CALCULATIONS ---
+  const totalJobsCount = jobs.length;
+  const pendingJobsCount = jobs.filter(j => j.status !== 'Delivered' && j.status !== 'Cancelled').length;
+  const totalRevenue = jobs.reduce((acc, j) => acc + j.repairCost + j.partsUsed.reduce((pAcc, p) => pAcc + (p.price * p.qty), 0), 0);
+  const totalCollected = jobs.reduce((acc, j) => acc + j.advancePaid, 0); // Simplified collection tracker
+  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
 
-  useEffect(() => {
-    localStorage.setItem('vc_stock', JSON.stringify(stock));
-  }, [stock]);
+  // --- PATTERN LOCK HANDLER ---
+  const handlePatternTouch = (dotIndex: number) => {
+    if (!patternDots.includes(dotIndex)) {
+      setPatternDots([...patternDots, dotIndex]);
+    }
+  };
 
-  useEffect(() => {
-    localStorage.setItem('vc_expenses', JSON.stringify(expenses));
-  }, [expenses]);
-
-  // Login Handler
-  const handleLogin = (e: React.FormEvent) => {
+  const saveNewJob = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'viraj123') {
-      setIsLoggedIn(true);
-      localStorage.setItem('vc_is_logged_in', 'true');
-      setLoginError('');
-    } else {
-      setLoginError('गलत यूज़रनेम या पासवर्ड! (Default: admin / viraj123)');
-    }
-  };
+    const cust = customers.find(c => c.id === selectedCustomer);
+    const newTicketNo = `${settings.invoicePrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+    const lockValue = lockType === 'Pattern' ? patternDots.join('-') : textLock;
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    localStorage.setItem('vc_is_logged_in', 'false');
-  };
-
-  // Pattern Canvas Logic
-  const dotCoords = [
-    { x: 35, y: 35, num: 1 }, { x: 110, y: 35, num: 2 }, { x: 185, y: 35, num: 3 },
-    { x: 35, y: 110, num: 4 }, { x: 110, y: 110, num: 5 }, { x: 185, y: 110, num: 6 },
-    { x: 35, y: 185, num: 7 }, { x: 110, y: 185, num: 8 }, { x: 185, y: 185, num: 9 }
-  ];
-
-  const drawPatternCanvas = (selected: number[]) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (selected.length > 1) {
-      ctx.beginPath();
-      ctx.strokeStyle = '#2563eb';
-      ctx.lineWidth = 4;
-      selected.forEach((dotNum, idx) => {
-        const pt = dotCoords[dotNum - 1];
-        if (idx === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      });
-      ctx.stroke();
-    }
-
-    dotCoords.forEach((d) => {
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, 10, 0, Math.PI * 2);
-      ctx.fillStyle = selected.includes(d.num) ? '#2563eb' : '#000000';
-      ctx.fill();
-    });
-  };
-
-  useEffect(() => {
-    if (lockType === 'PATTERN') {
-      drawPatternCanvas(patternDots);
-    }
-  }, [patternDots, lockType]);
-
-  const handleCanvasInteraction = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-
-    dotCoords.forEach((d) => {
-      const dist = Math.sqrt((x - d.x) ** 2 + (y - d.y) ** 2);
-      if (dist < 20 && !patternDots.includes(d.num)) {
-        const updated = [...patternDots, d.num];
-        setPatternDots(updated);
-        setLockInfo(`PATTERN (${updated.join('-')})`);
-      }
-    });
-  };
-
-  const handleCreateJob = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cost = parseFloat(totalCost) || 0;
-    const adv = parseFloat(advancePayment) || 0;
-    const rem = Math.max(0, cost - adv);
-    const payStatus = adv >= cost ? 'Paid' : adv > 0 ? 'Partial' : 'Unpaid';
-    const now = new Date();
-
-    const newJob: RepairJob = {
-      id: String(Math.floor(100000 + Math.random() * 900000)),
-      bookingDate: now.toLocaleDateString('en-IN'),
-      bookingTime: now.toLocaleTimeString('en-IN'),
-      customerName: custName,
-      customerMobile: custMobile,
-      phoneModel,
-      problem,
-      totalCost: cost,
-      advancePayment: adv,
-      remainingBalance: rem,
-      status: 'RECEIVED',
-      paymentStatus: payStatus,
-      lockInfo: lockInfo || lockType,
-      folderWarranty,
-      imei,
-      technician: 'Admin'
+    const newJob: JobSheet = {
+      id: Date.now().toString(),
+      ticketNo: newTicketNo,
+      customerName: cust ? cust.name : 'Walk-in Customer',
+      customerPhone: cust ? cust.phone : '9999999999',
+      deviceType,
+      brand,
+      model: model || 'Generic Model',
+      serialNo,
+      problem: problem || 'General Repair',
+      lockType,
+      lockValue,
+      technician: technician || 'Self',
+      repairCost: Number(repairCost) || 0,
+      partsUsed: selectedParts,
+      advancePaid: Number(advancePaid) || 0,
+      status: 'Checking',
+      rackNo,
+      notes: 'Job created via Viraj Connect Manager',
+      date: new Date().toISOString().split('T')[0]
     };
 
     setJobs([newJob, ...jobs]);
-    setSelectedReceiptJob(newJob);
-
-    // Reset Form
-    setCustMobile(''); setCustName(''); setPhoneModel('');
-    setProblem(''); setTotalCost(''); setAdvancePayment('');
-    setFolderWarranty(''); setLockInfo(''); setLockType('NO LOCK');
-    setPatternDots([]); setImei('');
-    setActiveTab('jobs');
+    setShowJobModal(false);
+    // Reset form
+    setModel('');
+    setProblem('');
+    setPatternDots([]);
+    setTextLock('');
+    setRepairCost(0);
+    setAdvancePaid(0);
+    setSelectedParts([]);
   };
 
-  const updateStatus = (id: string, newStatus: RepairJob['status']) => {
-    setJobs(jobs.map(j => j.id === id ? { ...j, status: newStatus } : j));
+  // --- WHATSAPP SHARE ---
+  const sendWhatsApp = (job: JobSheet) => {
+    const totalPartsCost = job.partsUsed.reduce((acc, p) => acc + (p.price * p.qty), 0);
+    const totalAmount = job.repairCost + totalPartsCost;
+    const balance = totalAmount - job.advancePaid;
+
+    const text = `*${settings.shopName} - Repair Receipt*\n` +
+      `Ticket: *${job.ticketNo}*\n` +
+      `Date: ${job.date}\n` +
+      `Device: ${job.brand} ${job.model}\n` +
+      `Problem: ${job.problem}\n` +
+      `Status: *${job.status}*\n` +
+      `Total Cost: ₹${totalAmount}\n` +
+      `Advance Paid: ₹${job.advancePaid}\n` +
+      `Balance Due: *₹${balance}*\n\n` +
+      `Thank you for choosing ${settings.shopName}! Call: ${settings.phone}`;
+
+    const encoded = encodeURIComponent(text);
+    window.open(`https://wa.me/91${job.customerPhone.replace(/[^0-9]/g, '')}?text=${encoded}`, '_blank');
   };
 
-  // Login Screen Render
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full border-t-8 border-yellow-500">
-          <div className="text-center mb-6">
-            <div className="w-16 h-16 bg-slate-900 text-amber-400 font-extrabold text-2xl rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
-              VC
-            </div>
-            <h1 className="text-2xl font-black text-slate-900">VIRAJ CONNECT</h1>
-            <p className="text-sm font-semibold text-amber-600 uppercase tracking-wider">Management Portal Login</p>
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+      
+      {/* HEADER NAVBAR */}
+      <header className="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between shadow-md">
+        <div className="flex items-center space-x-3">
+          <div className="bg-indigo-600 p-2 rounded-xl text-white font-black text-xl shadow-lg flex items-center justify-center">
+            VC
           </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-wide text-white">{settings.shopName}</h1>
+            <p className="text-xs text-slate-400">Advanced Mobile & Repair Shop Management System</p>
+          </div>
+        </div>
 
-          {loginError && (
-            <div className="bg-red-50 text-red-600 border border-red-200 p-3 rounded-lg text-sm mb-4 text-center font-bold">
-              {loginError}
+        <div className="flex items-center space-x-4">
+          <button 
+            onClick={() => setShowJobModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl font-semibold text-sm flex items-center space-x-2 shadow-md transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create New Job Sheet</span>
+          </button>
+        </div>
+      </header>
+
+      {/* MAIN CONTAINER */}
+      <div className="flex flex-1 overflow-hidden">
+        
+        {/* SIDEBAR NAVIGATION */}
+        <aside className="w-64 bg-slate-800/60 border-r border-slate-700 p-4 flex flex-col justify-between">
+          <nav className="space-y-1.5">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+              { id: 'jobs', label: 'Job Sheets / Repairs', icon: Wrench },
+              { id: 'pos', label: 'POS & Counter Sales', icon: ShoppingBag },
+              { id: 'customers', label: 'Customers & Techs', icon: Users },
+              { id: 'stock', label: 'Inventory & Parts', icon: Package },
+              { id: 'expenses', label: 'Expense Tracker', icon: DollarSign },
+              { id: 'reports', label: 'Reports & Statements', icon: FileText },
+              { id: 'settings', label: 'Shop Settings', icon: Settings },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as any)}
+                  className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
+                    isActive 
+                      ? 'bg-indigo-600 text-white shadow-lg' 
+                      : 'text-slate-300 hover:bg-slate-700/60 hover:text-white'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-700 text-xs text-slate-400">
+            <p className="font-semibold text-slate-200">System Status</p>
+            <p className="text-emerald-400 flex items-center mt-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block mr-1.5 animate-pulse"></span>
+              Live & Synced (Offline Ready)
+            </p>
+          </div>
+        </aside>
+
+        {/* CONTENT AREA */}
+        <main className="flex-1 bg-slate-950 p-6 overflow-y-auto">
+
+          {/* ==================== DASHBOARD ==================== */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <p className="text-xs text-slate-400 font-medium">Total Repair Jobs</p>
+                  <h3 className="text-2xl font-bold text-white mt-1">{totalJobsCount}</h3>
+                  <span className="text-xs text-indigo-400 mt-2 inline-block">Active Pending: {pendingJobsCount}</span>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <p className="text-xs text-slate-400 font-medium">Total Business Billing</p>
+                  <h3 className="text-2xl font-bold text-emerald-400 mt-1">{settings.currency}{totalRevenue}</h3>
+                  <span className="text-xs text-slate-500 mt-2 inline-block">Repairs + Parts</span>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <p className="text-xs text-slate-400 font-medium">Advance & Collections</p>
+                  <h3 className="text-2xl font-bold text-sky-400 mt-1">{settings.currency}{totalCollected}</h3>
+                  <span className="text-xs text-slate-500 mt-2 inline-block">Received cash/online</span>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <p className="text-xs text-slate-400 font-medium">Total Shop Expenses</p>
+                  <h3 className="text-2xl font-bold text-rose-400 mt-1">{settings.currency}{totalExpenses}</h3>
+                  <span className="text-xs text-slate-500 mt-2 inline-block">Rent, bills, etc.</span>
+                </div>
+              </div>
+
+              {/* RECENT JOBS TABLE */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-lg text-white">Recent Repair Jobs</h3>
+                  <button onClick={() => setActiveTab('jobs')} className="text-sm text-indigo-400 hover:underline">View All</button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
+                      <tr>
+                        <th className="p-3">Ticket</th>
+                        <th className="p-3">Customer</th>
+                        <th className="p-3">Device</th>
+                        <th className="p-3">Problem</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {jobs.slice(0, 5).map(job => (
+                        <tr key={job.id} className="hover:bg-slate-800/40">
+                          <td className="p-3 font-semibold text-indigo-400">{job.ticketNo}</td>
+                          <td className="p-3">{job.customerName}</td>
+                          <td className="p-3">{job.brand} {job.model}</td>
+                          <td className="p-3 truncate max-w-xs">{job.problem}</td>
+                          <td className="p-3">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              job.status === 'Ready' ? 'bg-emerald-500/20 text-emerald-400' :
+                              job.status === 'Delivered' ? 'bg-blue-500/20 text-blue-400' :
+                              'bg-amber-500/20 text-amber-400'
+                            }`}>
+                              {job.status}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <button 
+                              onClick={() => setActiveJobReceipt(job)}
+                              className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center space-x-1"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Receipt</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Username / यूजरनेम</label>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter Username"
-                className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Password / पासवर्ड</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter Password"
-                className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition shadow-md"
-            >
-              🔒 Secure Login
-            </button>
-          </form>
-          <p className="text-center text-xs text-slate-400 mt-6">VIRAJ CONNECT &copy; All Rights Reserved</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Filter Jobs
-  const filteredJobs = jobs.filter(j => {
-    const matchStatus = statusFilter === 'ALL' || j.status === statusFilter;
-    const q = jobSearch.toLowerCase();
-    const matchSearch = j.id.toLowerCase().includes(q) ||
-      j.customerName.toLowerCase().includes(q) ||
-      j.customerMobile.includes(q) ||
-      j.phoneModel.toLowerCase().includes(q);
-    return matchStatus && matchSearch;
-  });
-
-  return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-100 font-sans text-slate-800">
-      {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-amber-400 text-slate-900 flex flex-col border-r border-amber-500 shrink-0">
-        <div className="p-4 border-b border-black/10 text-center">
-          <div className="w-12 h-12 bg-slate-900 text-amber-400 font-extrabold text-xl rounded-full flex items-center justify-center mx-auto mb-2 shadow">
-            VC
-          </div>
-          <h2 className="font-black text-lg tracking-wider">VIRAJ CONNECT</h2>
-          <p className="text-xs text-slate-800 font-semibold">Repair & Inventory Portal</p>
-        </div>
-
-        <nav className="p-2 space-y-1 overflow-y-auto flex-grow">
-          <button
-            onClick={() => setActiveTab('jobs')}
-            className={`w-full text-left font-bold px-4 py-3 rounded-lg flex items-center gap-2 text-sm transition ${activeTab === 'jobs' ? 'bg-white text-slate-900 shadow' : 'hover:bg-amber-300'}`}
-          >
-            📋 Repair Job Sheet
-          </button>
-          <button
-            onClick={() => setActiveTab('create')}
-            className={`w-full text-left font-bold px-4 py-3 rounded-lg flex items-center gap-2 text-sm transition ${activeTab === 'create' ? 'bg-white text-slate-900 shadow' : 'hover:bg-amber-300'}`}
-          >
-            ➕ New Repair Entry
-          </button>
-          <button
-            onClick={() => setActiveTab('warranty')}
-            className={`w-full text-left font-bold px-4 py-3 rounded-lg flex items-center gap-2 text-sm transition ${activeTab === 'warranty' ? 'bg-white text-slate-900 shadow' : 'hover:bg-amber-300'}`}
-          >
-            🎧 Accessories Warranty
-          </button>
-          <button
-            onClick={() => setActiveTab('stock')}
-            className={`w-full text-left font-bold px-4 py-3 rounded-lg flex items-center gap-2 text-sm transition ${activeTab === 'stock' ? 'bg-white text-slate-900 shadow' : 'hover:bg-amber-300'}`}
-          >
-            📦 Stock Inventory
-          </button>
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className={`w-full text-left font-bold px-4 py-3 rounded-lg flex items-center gap-2 text-sm transition ${activeTab === 'expenses' ? 'bg-white text-slate-900 shadow' : 'hover:bg-amber-300'}`}
-          >
-            💸 Shop Expenses
-          </button>
-          <button
-            onClick={() => setActiveTab('balance')}
-            className={`w-full text-left font-bold px-4 py-3 rounded-lg flex items-center gap-2 text-sm transition ${activeTab === 'balance' ? 'bg-white text-slate-900 shadow' : 'hover:bg-amber-300'}`}
-          >
-            💰 Customer Balance
-          </button>
-        </nav>
-
-        <div className="p-4 border-t border-black/10">
-          <button
-            onClick={handleLogout}
-            className="w-full bg-slate-900 text-white font-bold py-2 rounded-lg text-sm hover:bg-slate-800 transition"
-          >
-            🚪 Logout
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-        {/* Header Branding Banner */}
-        <div className="bg-slate-900 text-white rounded-xl p-4 md:p-6 mb-6 shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <span className="bg-amber-500 text-slate-900 font-extrabold text-xs px-2.5 py-1 rounded uppercase tracking-wider">PRO REPAIR SOLUTIONS</span>
-            <h1 className="text-2xl md:text-3xl font-black text-amber-400 mt-1">VIRAJ CONNECT</h1>
-            <p className="text-xs text-slate-300">मोबाइल रिपेयरिंग, एक्सेसरीज एवं ऑल स्मार्टफोन सॉल्यूशन</p>
-          </div>
-          <div className="text-left md:text-right text-xs text-slate-300 space-y-1">
-            <p>📞 संपर्क: +91 98765 43210</p>
-            <p>📍 पता: मुख्य बाजार, बस स्टैंड रोड</p>
-          </div>
-        </div>
-
-        {/* Tab 1: Job Sheet List */}
-        {activeTab === 'jobs' && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-bold text-slate-900">📋 Repair Job Sheet</h2>
-              <button
-                onClick={() => setActiveTab('create')}
-                className="bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-lg hover:bg-slate-800 transition"
-              >
-                + Create New Job
-              </button>
-            </div>
-
-            {/* Status Grid Counter */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-              {['ALL', 'PENDING', 'REPAIRING', 'COMPLETED', 'NOT REPAIR', 'DELIVERED'].map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setStatusFilter(st)}
-                  className={`p-3 rounded-lg font-bold text-xs text-center border-2 transition ${statusFilter === st ? 'border-slate-900 shadow-md scale-105' : 'border-transparent'} ${st === 'ALL' ? 'bg-blue-600 text-white' :
-                    st === 'PENDING' ? 'bg-orange-500 text-white' :
-                      st === 'REPAIRING' ? 'bg-yellow-500 text-slate-900' :
-                        st === 'COMPLETED' ? 'bg-emerald-600 text-white' :
-                          st === 'NOT REPAIR' ? 'bg-slate-600 text-white' : 'bg-teal-600 text-white'
-                    }`}
-                >
-                  {st}
-                  <div className="text-base font-extrabold mt-0.5">
-                    {st === 'ALL' ? jobs.length : jobs.filter(j => j.status === st).length}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Search Input */}
-            <input
-              type="text"
-              placeholder="🔍 Search Job ID, Customer Name, Mobile or Phone Model..."
-              value={jobSearch}
-              onChange={(e) => setJobSearch(e.target.value)}
-              className="w-full bg-white border border-slate-300 p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
-            />
-
-            {/* Jobs Table */}
-            <div className="bg-white rounded-xl shadow border border-slate-200 overflow-x-auto">
-              {filteredJobs.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 text-sm">
-                  कोई रिकॉर्ड नहीं मिला। (No repair jobs found)
+          {/* ==================== JOB SHEETS ==================== */}
+          {activeTab === 'jobs' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Job Sheets & Repair Management</h2>
+                  <p className="text-xs text-slate-400">Track all ongoing mobile and laptop service requests</p>
                 </div>
-              ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-900 text-white">
-                      <th className="p-3">Action</th>
-                      <th className="p-3">Job ID</th>
-                      <th className="p-3">Status</th>
+                <div className="flex items-center space-x-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Search ticket, customer..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => setShowJobModal(true)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>New Job</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Filters */}
+              <div className="flex space-x-2 overflow-x-auto pb-2">
+                {['All', 'Checking', 'Repairing', 'Ready', 'Delivered'].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
+                      filterStatus === status ? 'bg-indigo-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+
+              {/* Jobs Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
+                    <tr>
+                      <th className="p-3">Ticket</th>
                       <th className="p-3">Date</th>
                       <th className="p-3">Customer</th>
-                      <th className="p-3">Mobile</th>
-                      <th className="p-3">Model</th>
+                      <th className="p-3">Device & Problem</th>
                       <th className="p-3">Lock Info</th>
-                      <th className="p-3">Cost</th>
-                      <th className="p-3">Balance</th>
+                      <th className="p-3">Cost / Advance</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredJobs.map((j) => (
-                      <tr key={j.id} className="hover:bg-slate-50">
+                  <tbody className="divide-y divide-slate-800">
+                    {jobs
+                      .filter(j => filterStatus === 'All' || j.status === filterStatus)
+                      .filter(j => j.ticketNo.toLowerCase().includes(searchQuery.toLowerCase()) || j.customerName.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map(job => (
+                        <tr key={job.id} className="hover:bg-slate-800/40">
+                          <td className="p-3 font-bold text-indigo-400">{job.ticketNo}</td>
+                          <td className="p-3 text-xs text-slate-400">{job.date}</td>
+                          <td className="p-3">
+                            <p className="font-semibold text-white">{job.customerName}</p>
+                            <p className="text-xs text-slate-400">{job.customerPhone}</p>
+                          </td>
+                          <td className="p-3">
+                            <p className="font-semibold text-slate-200">{job.brand} {job.model}</p>
+                            <p className="text-xs text-slate-400">{job.problem}</p>
+                          </td>
+                          <td className="p-3 text-xs font-mono text-amber-400">
+                            {job.lockType}: {job.lockValue || 'None'}
+                          </td>
+                          <td className="p-3">
+                            <p className="text-white font-semibold">₹{job.repairCost + job.partsUsed.reduce((a,b)=>a+b.price*b.qty,0)}</p>
+                            <p className="text-xs text-emerald-400">Adv: ₹{job.advancePaid}</p>
+                          </td>
+                          <td className="p-3">
+                            <select 
+                              value={job.status} 
+                              onChange={(e) => {
+                                const newStatus = e.target.value as any;
+                                setJobs(jobs.map(j => j.id === job.id ? { ...j, status: newStatus } : j));
+                              }}
+                              className="bg-slate-800 text-xs border border-slate-700 rounded-lg px-2 py-1 text-white"
+                            >
+                              <option value="Checking">Checking</option>
+                              <option value="Repairing">Repairing</option>
+                              <option value="Ready">Ready</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </td>
+                          <td className="p-3 text-right space-x-2">
+                            <button 
+                              onClick={() => sendWhatsApp(job)}
+                              className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 p-2 rounded-lg inline-flex"
+                              title="Send WhatsApp Update"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => setActiveJobReceipt(job)}
+                              className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 p-2 rounded-lg inline-flex"
+                              title="Print Receipt"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => setJobs(jobs.filter(j => j.id !== job.id))}
+                              className="bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 p-2 rounded-lg inline-flex"
+                              title="Delete Job"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== POS / COUNTER SALES ==================== */}
+          {activeTab === 'pos' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-4">
+                <h2 className="text-xl font-bold text-white">POS & Accessories Counter Sale</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {stockItems.map(item => (
+                    <div 
+                      key={item.id}
+                      onClick={() => {
+                        const existing = posCart.find(c => c.partId === item.id);
+                        if (existing) {
+                          setPosCart(posCart.map(c => c.partId === item.id ? { ...c, qty: c.qty + 1 } : c));
+                        } else {
+                          setPosCart([...posCart, { partId: item.id, name: item.name, price: item.salePrice, qty: 1 }]);
+                        }
+                      }}
+                      className="bg-slate-900 border border-slate-800 p-4 rounded-2xl cursor-pointer hover:border-indigo-500 transition shadow-sm"
+                    >
+                      <p className="font-semibold text-white">{item.name}</p>
+                      <p className="text-xs text-slate-400 mt-1">Stock: {item.stock}</p>
+                      <p className="text-indigo-400 font-bold mt-2">₹{item.salePrice}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cart Summary */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
+                <div>
+                  <h3 className="font-bold text-lg text-white mb-4">Current Bill</h3>
+                  <div className="space-y-3 mb-4">
+                    <input 
+                      type="text" 
+                      placeholder="Customer Name"
+                      value={posCustomerName}
+                      onChange={(e) => setPosCustomerName(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Customer Phone"
+                      value={posCustomerPhone}
+                      onChange={(e) => setPosCustomerPhone(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+
+                  <div className="space-y-2 max-h-60 overflow-y-auto mb-4 divide-y divide-slate-800">
+                    {posCart.map(c => (
+                      <div key={c.partId} className="pt-2 flex items-center justify-between text-sm">
+                        <div>
+                          <p className="font-semibold text-white">{c.name}</p>
+                          <p className="text-xs text-slate-400">₹{c.price} x {c.qty}</p>
+                        </div>
+                        <p className="font-bold text-indigo-400">₹{c.price * c.qty}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="border-t border-slate-800 pt-3 mb-4 flex justify-between text-lg font-bold text-white">
+                    <span>Total Amount:</span>
+                    <span className="text-emerald-400">₹{posCart.reduce((a,b) => a + (b.price * b.qty), 0)}</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      alert('POS Sale Completed Successfully!');
+                      setPosCart([]);
+                      setPosCustomerName('');
+                      setPosCustomerPhone('');
+                    }}
+                    disabled={posCart.length === 0}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold shadow-lg transition"
+                  >
+                    Complete Checkout
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== CUSTOMERS ==================== */}
+          {activeTab === 'customers' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Customers & Technicians Directory</h2>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
+                    <tr>
+                      <th className="p-3">Name</th>
+                      <th className="p-3">Phone</th>
+                      <th className="p-3">Address</th>
+                      <th className="p-3">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {customers.map(c => (
+                      <tr key={c.id}>
+                        <td className="p-3 font-semibold text-white">{c.name}</td>
+                        <td className="p-3">{c.phone}</td>
+                        <td className="p-3">{c.address}</td>
                         <td className="p-3">
-                          <button
-                            onClick={() => setSelectedReceiptJob(j)}
-                            className="bg-sky-600 text-white font-bold px-2.5 py-1 rounded text-xs hover:bg-sky-700"
-                          >
-                            📄 Receipt
-                          </button>
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${c.type === 'Technician' ? 'bg-purple-500/20 text-purple-400' : 'bg-sky-500/20 text-sky-400'}`}>
+                            {c.type}
+                          </span>
                         </td>
-                        <td className="p-3 font-bold text-slate-900">#{j.id}</td>
-                        <td className="p-3">
-                          <select
-                            value={j.status}
-                            onChange={(e) => updateStatus(j.id, e.target.value as RepairJob['status'])}
-                            className="border border-slate-300 rounded p-1 text-xs bg-white font-semibold"
-                          >
-                            <option value="RECEIVED">RECEIVED</option>
-                            <option value="PENDING">PENDING</option>
-                            <option value="REPAIRING">REPAIRING</option>
-                            <option value="COMPLETED">COMPLETED</option>
-                            <option value="NOT REPAIR">NOT REPAIR</option>
-                            <option value="RETURN">RETURN</option>
-                            <option value="DELIVERED">DELIVERED</option>
-                          </select>
-                        </td>
-                        <td className="p-3 text-slate-500">{j.bookingDate}</td>
-                        <td className="p-3 font-semibold">{j.customerName}</td>
-                        <td className="p-3 font-mono">{j.customerMobile}</td>
-                        <td className="p-3 font-medium">{j.phoneModel}</td>
-                        <td className="p-3 text-blue-600 font-bold">{j.lockInfo || '-'}</td>
-                        <td className="p-3 font-bold">₹{j.totalCost}</td>
-                        <td className="p-3 font-bold text-red-600">₹{j.remainingBalance}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Tab 2: Create New Repair Job */}
-        {activeTab === 'create' && (
-          <div className="bg-white rounded-xl shadow border border-slate-200 p-6 max-w-2xl mx-auto">
-            <h3 className="text-lg font-bold text-slate-900 mb-4 border-b pb-2">📱 Create New Repair Job Card</h3>
-            <form onSubmit={handleCreateJob} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Customer Mobile Number *</label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  placeholder="10 Digit Mobile Number"
-                  value={custMobile}
-                  onChange={(e) => setCustMobile(e.target.value)}
-                  className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                />
+          {/* ==================== INVENTORY / STOCK ==================== */}
+          {activeTab === 'stock' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Parts & Accessories Inventory</h2>
               </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Customer Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Customer Full Name"
-                  value={custName}
-                  onChange={(e) => setCustName(e.target.value)}
-                  className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                />
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
+                    <tr>
+                      <th className="p-3">Item Name</th>
+                      <th className="p-3">Purchase Price</th>
+                      <th className="p-3">Sale Price</th>
+                      <th className="p-3">Stock Available</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {stockItems.map(item => (
+                      <tr key={item.id}>
+                        <td className="p-3 font-semibold text-white">{item.name}</td>
+                        <td className="p-3 text-slate-400">₹{item.purchasePrice}</td>
+                        <td className="p-3 text-emerald-400 font-semibold">₹{item.salePrice}</td>
+                        <td className="p-3">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${item.stock < 5 ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                            {item.stock} Units
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            </div>
+          )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ==================== EXPENSES ==================== */}
+          {activeTab === 'expenses' && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-bold text-white">Shop Expense Tracker</h2>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
+                    <tr>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3">Notes</th>
+                      <th className="p-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {expenses.map(e => (
+                      <tr key={e.id}>
+                        <td className="p-3 text-slate-400">{e.date}</td>
+                        <td className="p-3 font-semibold text-white">{e.category}</td>
+                        <td className="p-3">{e.notes}</td>
+                        <td className="p-3 text-right font-bold text-rose-400">₹{e.amount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== REPORTS ==================== */}
+          {activeTab === 'reports' && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-bold text-white">Reports & Financial Overview</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+                  <h3 className="font-semibold text-white mb-2">Total Gross Earnings</h3>
+                  <p className="text-3xl font-extrabold text-emerald-400">₹{totalRevenue}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+                  <h3 className="font-semibold text-white mb-2">Total Expenses</h3>
+                  <p className="text-3xl font-extrabold text-rose-400">₹{totalExpenses}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+                  <h3 className="font-semibold text-white mb-2">Net Estimated Profit</h3>
+                  <p className="text-3xl font-extrabold text-indigo-400">₹{totalRevenue - totalExpenses}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== SETTINGS ==================== */}
+          {activeTab === 'settings' && (
+            <div className="max-w-2xl bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-4">
+              <h2 className="text-xl font-bold text-white">Shop Settings & Branding</h2>
+              <div className="space-y-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Phone Model *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Vivo Y20 / Samsung A12"
-                    value={phoneModel}
-                    onChange={(e) => setPhoneModel(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                  <label className="text-xs text-slate-400">Shop Name</label>
+                  <input 
+                    type="text" 
+                    value={settings.shopName} 
+                    onChange={(e) => setSettings({...settings, shopName: e.target.value})}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">IMEI / Serial (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="15 Digit IMEI Number"
-                    value={imei}
-                    onChange={(e) => setImei(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                  <label className="text-xs text-slate-400">Phone Number</label>
+                  <input 
+                    type="text" 
+                    value={settings.phone} 
+                    onChange={(e) => setSettings({...settings, phone: e.target.value})}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1"
                   />
                 </div>
+                <div>
+                  <label className="text-xs text-slate-400">Address</label>
+                  <input 
+                    type="text" 
+                    value={settings.address} 
+                    onChange={(e) => setSettings({...settings, address: e.target.value})}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1"
+                  />
+                </div>
+                <button 
+                  onClick={() => alert('Settings Saved Successfully!')}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl font-semibold shadow-lg transition"
+                >
+                  Save Settings
+                </button>
               </div>
+            </div>
+          )}
 
+        </main>
+      </div>
+
+      {/* ==================== NEW JOB SHEET MODAL ==================== */}
+      {showJobModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 max-w-xl w-full p-6 rounded-2xl space-y-4 my-8">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg text-white">Create New Repair Job Sheet</h3>
+              <button onClick={() => setShowJobModal(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={saveNewJob} className="space-y-4">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Phone Problem / Repair Issue *</label>
-                <textarea
-                  required
-                  placeholder="e.g. Display Combo Change, Charging Jack Repair"
-                  value={problem}
-                  onChange={(e) => setProblem(e.target.value)}
-                  rows={2}
-                  className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                />
+                <label className="text-xs text-slate-400">Select Customer</label>
+                <select 
+                  value={selectedCustomer} 
+                  onChange={(e) => setSelectedCustomer(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1"
+                >
+                  <option value="">-- Choose Customer --</option>
+                  {customers.filter(c => c.type === 'Customer').map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Total Repair Cost (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    placeholder="Billing Amount"
-                    value={totalCost}
-                    onChange={(e) => setTotalCost(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Advance Deposit (₹)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    value={advancePayment}
-                    onChange={(e) => setAdvancePayment(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Folder Warranty</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 3 Months Warranty"
-                    value={folderWarranty}
-                    onChange={(e) => setFolderWarranty(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Lock Type *</label>
-                  <select
-                    value={lockType}
-                    onChange={(e) => {
-                      setLockType(e.target.value);
-                      if (e.target.value !== 'PATTERN') setLockInfo(e.target.value);
-                    }}
-                    className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                  <label className="text-xs text-slate-400">Device Type</label>
+                  <select 
+                    value={deviceType} 
+                    onChange={(e) => setDeviceType(e.target.value as any)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1"
                   >
-                    <option value="NO LOCK">No Lock</option>
-                    <option value="PIN">PIN Code</option>
-                    <option value="PASSWORD">Password</option>
-                    <option value="PATTERN">Draw Pattern</option>
+                    <option value="Mobile">Mobile</option>
+                    <option value="Laptop">Laptop</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
+                <div>
+                  <label className="text-xs text-slate-400">Brand & Model</label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <input type="text" placeholder="Brand" value={brand} onChange={(e) => setBrand(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" />
+                    <input type="text" placeholder="Model" value={model} onChange={(e) => setModel(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white" />
+                  </div>
+                </div>
               </div>
 
-              {lockType === 'PIN' || lockType === 'PASSWORD' ? (
+              <div>
+                <label className="text-xs text-slate-400">Problem Description</label>
+                <input type="text" placeholder="e.g. Display Broken, Charging Issue" value={problem} onChange={(e) => setProblem(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1" />
+              </div>
+
+              {/* INTERACTIVE PATTERN LOCK DRAWING */}
+              <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                <label className="text-xs text-slate-300 font-semibold mb-2 block">Draw Pattern Lock (9 Dots)</label>
+                <div className="grid grid-cols-3 gap-3 w-40 mx-auto my-3">
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(dot => (
+                    <button
+                      key={dot}
+                      type="button"
+                      onClick={() => handlePatternTouch(dot)}
+                      className={`w-10 h-10 rounded-full border-2 transition flex items-center justify-center font-bold text-xs ${
+                        patternDots.includes(dot) ? 'bg-indigo-600 border-indigo-400 text-white' : 'border-slate-600 bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {patternDots.indexOf(dot) !== -1 ? patternDots.indexOf(dot) + 1 : ''}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center text-xs text-slate-400 mt-2">
+                  <span>Sequence: {patternDots.join(' → ') || 'None'}</span>
+                  <button type="button" onClick={() => setPatternDots([])} className="text-rose-400 hover:underline">Reset Pattern</button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Enter {lockType}</label>
-                  <input
-                    type="text"
-                    placeholder={`Enter ${lockType} Code`}
-                    value={lockInfo}
-                    onChange={(e) => setLockInfo(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                  />
+                  <label className="text-xs text-slate-400">Repair Cost (₹)</label>
+                  <input type="number" value={repairCost} onChange={(e) => setRepairCost(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1" />
                 </div>
-              ) : null}
-
-              {lockType === 'PATTERN' && (
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl text-center">
-                  <p className="font-bold text-blue-900 text-xs mb-2">Draw Pattern Lock Below:</p>
-                  <canvas
-                    ref={canvasRef}
-                    width={220}
-                    height={220}
-                    className="bg-blue-100 rounded-lg mx-auto touch-none cursor-crosshair shadow-inner"
-                    onMouseDown={(e) => { setIsDrawingPattern(true); handleCanvasInteraction(e.clientX, e.clientY); }}
-                    onMouseMove={(e) => { if (isDrawingPattern) handleCanvasInteraction(e.clientX, e.clientY); }}
-                    onMouseUp={() => setIsDrawingPattern(false)}
-                    onTouchStart={(e) => { setIsDrawingPattern(true); handleCanvasInteraction(e.touches[0].clientX, e.touches[0].clientY); }}
-                    onTouchMove={(e) => { if (isDrawingPattern) handleCanvasInteraction(e.touches[0].clientX, e.touches[0].clientY); }}
-                    onTouchEnd={() => setIsDrawingPattern(false)}
-                  />
-                  <div className="mt-2 font-bold text-blue-700 text-xs">
-                    Pattern: {patternDots.join('-') || 'None'}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setPatternDots([]); setLockInfo(''); }}
-                    className="mt-2 bg-red-600 text-white font-bold text-xs px-3 py-1 rounded hover:bg-red-700"
-                  >
-                    ↺ Reset Pattern
-                  </button>
+                <div>
+                  <label className="text-xs text-slate-400">Advance Paid (₹)</label>
+                  <input type="number" value={advancePaid} onChange={(e) => setAdvancePaid(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white mt-1" />
                 </div>
-              )}
+              </div>
 
-              <button
-                type="submit"
-                className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition text-sm shadow-md"
-              >
-                💾 Save Repair Job & Generate Receipt
-              </button>
+              <div className="flex justify-end space-x-3 pt-4 border-t border-slate-800">
+                <button type="button" onClick={() => setShowJobModal(false)} className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 text-slate-300">Cancel</button>
+                <button type="submit" className="px-6 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg">Save Job Sheet</button>
+              </div>
             </form>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Tab 3: Accessories Warranty */}
-        {activeTab === 'warranty' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-900">🎧 Accessories Warranty Management</h2>
-            <div className="bg-white rounded-xl p-4 border border-slate-200 shadow text-xs">
-              <p className="text-slate-500">यहाँ पर बेचे गए ब्लूटूथ नेकबैंड, चार्जर, डेटा केबल आदि की वारंटी कार्ड एंट्री करें।</p>
+      {/* ==================== RECEIPT PRINT MODAL ==================== */}
+      {activeJobReceipt && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white text-slate-900 max-w-lg w-full p-8 rounded-2xl shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h2 className="text-xl font-black text-indigo-900">{settings.shopName}</h2>
+                <p className="text-xs text-slate-600">{settings.address} | Ph: {settings.phone}</p>
+              </div>
+              <button onClick={() => setActiveJobReceipt(null)} className="no-print bg-slate-100 hover:bg-slate-200 p-2 rounded-full"><X className="w-5 h-5" /></button>
             </div>
-          </div>
-        )}
 
-        {/* Tab 4: Stock Inventory */}
-        {activeTab === 'stock' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-900">📦 Stock Inventory</h2>
-            <div className="bg-white rounded-xl p-4 border border-slate-200 shadow text-xs">
-              <p className="text-slate-500">दुकान में मौजूद फोल्डर, बैटरी और एक्सेसरीज का स्टॉक मैनेज करें।</p>
-            </div>
-          </div>
-        )}
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-bold">Ticket: {activeJobReceipt.ticketNo}</span>
+                <span className="text-slate-600">Date: {activeJobReceipt.date}</span>
+              </div>
+              <div>
+                <p><strong className="text-slate-700">Customer:</strong> {activeJobReceipt.customerName} ({activeJobReceipt.customerPhone})</p>
+                <p><strong className="text-slate-700">Device:</strong> {activeJobReceipt.brand} {activeJobReceipt.model}</p>
+                <p><strong className="text-slate-700">Problem:</strong> {activeJobReceipt.problem}</p>
+                <p><strong className="text-slate-700">Lock:</strong> {activeJobReceipt.lockType} ({activeJobReceipt.lockValue})</p>
+              </div>
 
-        {/* Tab 5: Shop Expenses */}
-        {activeTab === 'expenses' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-900">💸 Shop Expenses</h2>
-            <div className="bg-white rounded-xl p-4 border border-slate-200 shadow text-xs">
-              <p className="text-slate-500">दुकान का रोज़ाना का खर्चा (चाय, टूल, ट्रांसपोर्ट आदि) यहाँ दर्ज करें।</p>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 6: Customer Balance */}
-        {activeTab === 'balance' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-900">💰 Customer Pending Balance</h2>
-            <div className="bg-white rounded-xl p-4 border border-slate-200 shadow text-xs">
-              <p className="text-slate-500">पुराने ग्राहकों का बकाया पैसा चेक करें और पेमेंट जमा करें।</p>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Printable Receipt Modal */}
-      {selectedReceiptJob && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full border border-slate-300">
-            <div className="text-center border-b pb-4 mb-4">
-              <h2 className="text-2xl font-black text-slate-900">VIRAJ CONNECT</h2>
-              <p className="text-xs text-slate-600 font-bold">Mobile Repairing & Smartphone Solutions</p>
-              <p className="text-xs text-slate-500">Contact: +91 98765 43210</p>
-              <div className="mt-2 inline-block bg-slate-900 text-white font-extrabold text-xs px-3 py-1 rounded">
-                REPAIR RECEIPT / TOKEN
+              <div className="border-t pt-3 flex justify-between font-bold text-base">
+                <span>Total Cost:</span>
+                <span>₹{activeJobReceipt.repairCost + activeJobReceipt.partsUsed.reduce((a,b)=>a+b.price*b.qty,0)}</span>
+              </div>
+              <div className="flex justify-between text-emerald-600 font-semibold">
+                <span>Advance Paid:</span>
+                <span>₹{activeJobReceipt.advancePaid}</span>
+              </div>
+              <div className="flex justify-between text-rose-600 font-bold border-b pb-3">
+                <span>Balance Due:</span>
+                <span>₹{(activeJobReceipt.repairCost + activeJobReceipt.partsUsed.reduce((a,b)=>a+b.price*b.qty,0)) - activeJobReceipt.advancePaid}</span>
               </div>
             </div>
 
-            <div className="space-y-2 text-xs border-b pb-4 mb-4">
-              <div className="flex justify-between font-bold">
-                <span>Receipt No: #{selectedReceiptJob.id}</span>
-                <span>Date: {selectedReceiptJob.bookingDate}</span>
-              </div>
-              <p><strong>Customer:</strong> {selectedReceiptJob.customerName} ({selectedReceiptJob.customerMobile})</p>
-              <p><strong>Phone Model:</strong> {selectedReceiptJob.phoneModel}</p>
-              <p><strong>Problem:</strong> {selectedReceiptJob.problem}</p>
-              <p><strong>Lock Info:</strong> {selectedReceiptJob.lockInfo}</p>
-              <div className="bg-slate-50 p-2.5 rounded border border-slate-200 mt-2 space-y-1">
-                <div className="flex justify-between">
-                  <span>Total Cost:</span>
-                  <span className="font-bold">₹{selectedReceiptJob.totalCost}</span>
-                </div>
-                <div className="flex justify-between text-emerald-700">
-                  <span>Advance Paid:</span>
-                  <span className="font-bold">₹{selectedReceiptJob.advancePayment}</span>
-                </div>
-                <div className="flex justify-between text-red-600 font-bold border-t pt-1">
-                  <span>Remaining Balance:</span>
-                  <span>₹{selectedReceiptJob.remainingBalance}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-[10px] text-slate-500 mb-6 space-y-1 leading-tight">
-              <p className="font-bold text-slate-700">📌 Terms & Conditions:</p>
-              <p>1. Please check phone thoroughly at the time of delivery.</p>
-              <p>2. No warranty on water damage or physical screen breakage.</p>
-              <p>3. Receipt required for phone collection.</p>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => window.print()}
-                className="flex-1 bg-slate-900 text-white font-bold py-2.5 rounded-lg text-xs hover:bg-slate-800"
-              >
-                🖨️ Print Receipt
+            <div className="flex space-x-3 no-print pt-2">
+              <button onClick={() => window.print()} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-xl font-bold flex items-center justify-center space-x-2">
+                <Printer className="w-4 h-4" />
+                <span>Print Receipt</span>
               </button>
-              <button
-                onClick={() => setSelectedReceiptJob(null)}
-                className="bg-slate-200 text-slate-800 font-bold px-4 py-2.5 rounded-lg text-xs hover:bg-slate-300"
-              >
-                Close
+              <button onClick={() => sendWhatsApp(activeJobReceipt)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold flex items-center space-x-2">
+                <MessageSquare className="w-4 h-4" />
+                <span>WhatsApp</span>
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
